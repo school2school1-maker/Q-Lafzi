@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محاكي القدرات اللفظي - أ/ عبدالعزيز الفيفي</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <style>
+        :root { --maroon: #800000; --gold: #d4af37; --bg: #fdfaf1; --white: #ffffff; --correct: #2e7d32; --wrong: #c62828; --matte-red: #B22222; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; margin: 0; user-select: none; }
+        .quiz-card { background: var(--white); width: 100%; max-width: 900px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-top: 10px solid var(--maroon); padding: 30px; position: relative; }
+        .header { text-align: center; border-bottom: 2px solid var(--gold); margin-bottom: 20px; padding-bottom: 10px; }
+        .header h3, .header h4 { color: var(--matte-red); margin: 5px 0; }
+        input, select { width: 85%; padding: 14px; border-radius: 8px; border: 1.5px solid #ccc; font-size: 1.1rem; outline: none; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto; text-align: center; }
+        .nav-bar { display: flex; justify-content: space-between; align-items: center; background: #f4f4f4; padding: 12px 20px; border-radius: 10px; margin-bottom: 20px; }
+        .q-text { font-size: 1.4rem; font-weight: bold; text-align: center; margin-bottom: 25px; line-height: 1.8; color: #222; }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .opt { padding: 18px; border: 2px solid #ececec; border-radius: 12px; cursor: pointer; text-align: center; font-size: 1.2rem; background: #fff; font-weight: 600; }
+        .opt:hover { border-color: var(--gold); background: #fffcf0; }
+        .correct { background: var(--correct) !important; color: white; border-color: var(--correct) !important; }
+        .wrong { background: var(--wrong) !important; color: white; border-color: var(--wrong) !important; }
+        .btn { background: var(--maroon); color: var(--gold); padding: 14px 50px; border: none; border-radius: 10px; cursor: pointer; font-size: 1.2rem; font-weight: bold; }
+        .hidden { display: none !important; }
+        #lock-screen { text-align: center; padding: 40px 20px; border: 2px dashed var(--wrong); border-radius: 15px; background: #fff5f5; }
+
+        /* تعديل اللون ليكون أصفر خفيف جداً وهادئ */
+        .reading-passage {
+            background-color: #fffde7; /* أصفر كريمي فاتح جداً */
+            border-right: 6px solid #f9f1a5; /* حافة متناسقة مع اللون */
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            display: block;
+            text-align: right;
+            font-size: 1.25rem;
+            color: #444;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+            line-height: 1.7;
+        }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+<div class="quiz-card">
+    <div class="header">
+        <h3>أ / عبدالعزيز الفيفي ✨</h3>
+        <h4>ثانوية الأمير عبدالمجيد 🎓</h4>
+        <h2>محاكي القدرات اللفظي - نموذج (12)</h2>
+    </div>
+
+    <div id="lock-screen" class="hidden">
+        <h1 style="font-size: 3rem; margin: 0;">🚫</h1>
+        <h2 style="color: var(--wrong);">محاولة غير مصرح بها!</h2>
+        <div id="lock-info" style="font-size: 1.2rem; line-height: 2; color: #444;">
+            <p id="lock-message"></p>
+        </div>
+    </div>
+
+    <div id="start-page" style="text-align: center;">
+        <p style="color: var(--maroon); font-weight: bold;">يرجى إدخال بريدك الوزاري المسجل للدخول</p>
+        <input type="email" id="studentEmail" placeholder="البريد الإلكتروني الوزاري (sxxxxxxx@rb.moe.gov.sa)">
+        <button id="start-btn" class="btn" onclick="verifyAndStart()">التحقق والدخول للاختبار 🚀</button>
+        <p id="status-msg" style="margin-top: 15px; font-weight: bold; color: var(--gold);"></p>
+    </div>
+
+    <div id="quiz-page" class="hidden">
+        <div class="nav-bar">
+            <div id="q-counter" style="font-weight: bold;"></div>
+            <div id="timer" style="font-weight: 900; color: var(--maroon); font-size: 1.4rem;">45</div>
+        </div>
+        <div id="question-text" class="q-text"></div>
+        <div id="options-area" class="options-grid"></div>
+        <div style="text-align: center; margin-top: 25px;">
+            <button id="next-btn" class="btn hidden" onclick="nextQuestion()">السؤال التالي ⮕</button>
+        </div>
+    </div>
+
+    <div id="result-page" class="hidden" style="text-align: center;">
+        <h2 style="color: var(--maroon);">تم الانتهاء! نتيجتك هي:</h2>
+        <div style="font-size: 4rem; font-weight: bold; margin: 20px 0; color: var(--gold);" id="score-text"></div>
+    </div>
+</div>
+
+<script>
+    const currentModelId = "model_12"; 
+    const firebaseConfig = {
+        apiKey: "AIzaSyBkCO7FDQXd89YDf843J4_AtvEFvzzt-R0",
+        authDomain: "aztlg-494c3.firebaseapp.com",
+        projectId: "aztlg-494c3",
+        storageBucket: "aztlg-494c3.firebasestorage.app",
+        messagingSenderId: "597051893949",
+        appId: "1:597051893949:web:de5554ac900317a92b2fd4"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let sName, sEmail, sClass = "1 / 6";
+
+    async function verifyAndStart() {
+        const emailInput = document.getElementById('studentEmail').value.trim().toLowerCase();
+        const status = document.getElementById('status-msg');
+        const btn = document.getElementById('start-btn');
+        if(!emailInput.includes('@')) return alert("يرجى إدخال بريد إلكتروني صحيح.");
+        btn.disabled = true;
+        status.innerText = "جاري التحقق من بياناتك... ⏳";
+        try {
+            const allowedDoc = await db.collection("allowed_students").doc(emailInput).get();
+            if (!allowedDoc.exists) {
+                status.innerText = "";
+                showLock("عذراً، هذا الإيميل غير مسجل في قائمة الطلاب المعتمدة لهذا الاختبار.");
+                return;
+            }
+            const studentData = allowedDoc.data();
+            sName = studentData.name;
+            sEmail = emailInput;
+            const resultCheck = await db.collection("student_results").where("email", "==", sEmail).where("model_id", "==", currentModelId).get();
+            if (!resultCheck.empty) {
+                status.innerText = "";
+                showLock(`يا ${sName}، لقد قمت بأداء هذا الاختبار مسبقاً. لا يسمح بإعادة المحاولة.`);
+                return;
+            }
+            document.getElementById('start-page').classList.add('hidden');
+            document.getElementById('quiz-page').classList.remove('hidden');
+            loadQuestion();
+        } catch (error) {
+            console.error(error);
+            alert("حدث خطأ في الاتصال، يرجى المحاولة لاحقاً.");
+            btn.disabled = false;
+        }
+    }
+
+    function showLock(msg) {
+        document.getElementById('start-page').classList.add('hidden');
+        document.getElementById('lock-screen').classList.remove('hidden');
+        document.getElementById('lock-message').innerText = msg;
+    }
+
+    const quizData = [
+    // --- 1. التناظر اللفظي (7 أسئلة) ---
+    { q: "قاضي : محكمة", opts: ["لاعب : ملعب", "شجر : غابة", "فصل : مدرسة", "نجار : خشب"], ans: "لاعب : ملعب" },
+    { q: "محراب : مسجد", opts: ["منبر : خطبة", "نافذة : غرفة", "صلاة : صيام", "حج : مكة"], ans: "نافذة : غرفة" },
+    { q: "جناح : طائر", opts: ["منقار : ريش", "ماء : نهر", "شراع : سفينة", "عجلة : سيارة"], ans: "شراع : سفينة" },
+    { q: "سيف : غمد", opts: ["خاتم : إصبع", "سكين : مطبخ", "نصل : حديد", "كتاب : حقيبة"], ans: "كتاب : حقيبة" },
+    { q: "خيط : ثوب", opts: ["ورقة : شجر", "خرزة : سبحة", "كتاب : صفحة", "نواة : تمر"], ans: "خرزة : سبحة" },
+    { q: "حمامة : سلام", opts: ["أسد : غابة", "ثعلب : مكر", "وردة : حديقة", "نخلة : رخاء"], ans: "ثعلب : مكر" },
+    { q: "نوم : ليل", opts: ["عمل : نهار", "شمس : نهار", "حرارة : صيف", "صوم : رمضان"], ans: "عمل : نهار" },
+
+    // --- 2. المفردة الشاذة (7 أسئلة) ---
+    { q: "حدد المفردة الشاذة:", opts: ["موز", "برتقال", "خيار", "تفاح"], ans: "خيار" },
+    { q: "حدد المفردة الشاذة:", opts: ["سيف", "درع", "رمح", "خنجر"], ans: "درع" },
+    { q: "حدد المفردة الشاذة:", opts: ["مكة", "الرياض", "المنامة", "القاهرة"], ans: "مكة" },
+    { q: "حدد المفردة الشاذة:", opts: ["سيارة", "دراجة", "سفينة", "طائرة"], ans: "طائرة" },
+    { q: "حدد المفردة الشاذة:", opts: ["أسد", "ذئب", "نمر", "غزال"], ans: "غزال" },
+    { q: "حدد المفردة الشاذة:", opts: ["حديد", "نحاس", "ألمنيوم", "خشب"], ans: "خشب" },
+    { q: "حدد المفردة الشاذة:", opts: ["شتاء", "صيف", "مطر", "ربيع"], ans: "مطر" },
+
+    // --- 3. إكمال الجمل (7 أسئلة) ---
+    { q: "كن ...... في الشدائد، ...... في الرخاء.", opts: ["قوياً - ضعيفاً", "هادئاً - صاخباً", "صابراً - شاكراً", "حزيناً - فرحاً"], ans: "صابراً - شاكراً" },
+    { q: "من ...... في صغره، ...... في كبره.", opts: ["لعب - فاز", "اجتهد - ساد", "نام - استيقظ", "تعلم - خسر"], ans: "اجتهد - ساد" },
+    { q: "العلم بلا عمل كـ ...... بلا ...... .", opts: ["البحر - سمك", "الليل - قمر", "الشجر - ثمر", "البيت - باب"], ans: "الشجر - ثمر" },
+    { q: "لا تجادل ...... فربما لا يفرق الناس بينكما.", opts: ["العالم", "الأحمق", "الجاهل", "الكاذب"], ans: "الأحمق" },
+    { q: "يعد ...... من أعظم وسائل المعرفة في عصرنا.", opts: ["التلفاز", "المذياع", "الإنترنت", "الهاتف"], ans: "الإنترنت" },
+    { q: "إذا كنت في ...... فاحفظ لسانك، وإذا كنت في ...... فاحفظ عينك.", opts: ["صلاة - شارع", "مجلس - بيت", "عمل - مدرسة", "غضب - فرح"], ans: "مجلس - بيت" },
+    { q: "الابتسامة ...... دافئة، ولغة ...... عالمية.", opts: ["كلمة - يفهمها", "نظرة - جميلة", "لمسة - صامتة", "روح - صادقة"], ans: "لمسة - صامتة" },
+
+    // --- 4. استيعاب المقروء (6 أسئلة بنصوص من 3-5 أسطر) ---
+    { 
+        q: "<span class='reading-passage'>تعتبر تقنية النانو ثورة حقيقية في العلوم المعاصرة، حيث تعتمد على التعامل مع المادة بمقاييس ذرية وجزيئية متناهية الصغر. تهدف هذه التقنية إلى ابتكار مواد وأجهزة جديدة ذات خصائص فيزيائية وكيميائية فريدة لم تكن متاحة من قبل، مما يفتح آفاقاً واسعة في الطب والصناعة وحماية البيئة. ومع ذلك، يرى الخبراء ضرورة الحذر من آثارها الجانبية المحتملة على الصحة العامة.</span> الفكرة الرئيسية للنص تتحدث عن: ", 
+        opts: ["تاريخ اكتشاف الذرة", "ماهية تقنية النانو وأهميتها", "مخاطر الطب الحديث", "تلوث البيئة الجزيئي"], 
+        ans: "ماهية تقنية النانو وأهميتها" 
+    },
+    { 
+        q: "<span class='reading-passage'>تعد الغابات المطيرة رئة كوكب الأرض الحقيقية، فهي لا تقتصر وظيفتها على توفير الأكسجين فحسب، بل تعمل كمخزن هائل للكربون مما يساهم في موازنة المناخ العالمي. يسكن في هذه الغابات أكثر من نصف أنواع الكائنات الحية المعروفة في العالم، مما يجعلها كنزاً للتنوع البيولوجي. إن استمرار عمليات الاحتطاب الجائر يهدد بقاء هذه الغابات، مما قد يؤدي إلى كوارث بيئية لا يمكن تداركها مستقبلاً.</span> يتضح من النص أن أهمية الغابات تعود إلى كونها:", 
+        opts: ["مصدراً للأخشاب الثمينة", "أراضي صالحة للزراعة", "منظماً للمناخ ومركزاً للتنوع", "أماكن سياحية مريحة"], 
+        ans: "منظماً للمناخ ومركزاً للتنوع" 
+    },
+    { 
+        q: "<span class='reading-passage'>إن الأمن الغذائي لا يعني فقط توفر الطعام، بل يشمل قدرة جميع الأفراد على الوصول إليه في جميع الأوقات بأسعار مناسبة وبجودة صحية. يتأثر هذا الأمن بشكل مباشر بالتقلبات السياسية والاقتصادية، بالإضافة إلى التغيرات المناخية التي تؤثر على إنتاج المحاصيل الزراعية. لذلك تسعى الدول لتطوير استراتيجيات تعتمد على الابتكار الزراعي وتقليل الهدر لضمان استقرار إمدادات الغذاء لأجيالها القادمة.</span> يشير النص إلى أن الأمن الغذائي يتأثر بـ:", 
+        opts: ["العوامل السياسية والمناخية", "نوعية البذور فقط", "عدد السكان في المدن", "تنوع الوجبات الغذائية"], 
+        ans: "العوامل السياسية والمناخية" 
+    },
+    { 
+        q: "<span class='reading-passage'>تعتبر الهوية الثقافية بمثابة البصمة التي تميز المجتمعات عن بعضها البعض، فهي تتشكل من اللغة والدين والعادات والتاريخ المشترك. في ظل العولمة المتسارعة، تواجه الهويات المحلية تحديات كبيرة نتيجة الانفتاح الرقمي وسهولة انتقال الأفكار العابرة للحدود. إن التمسك بالهوية لا يعني الانغلاق، بل هو انطلاق من جذور ثابتة نحو آفاق عالمية أرحب مع الحفاظ على الخصوصية التي تمنح الفرد شعوره بالانتماء.</span> المقصود بالهوية الثقافية كما ورد في النص:", 
+        opts: ["التعصب للأفكار القديمة", "إلغاء الثقافات الأخرى", "البصمة المميزة للمجتمعات", "الانفتاح الكلي على العولمة"], 
+        ans: "البصمة المميزة للمجتمعات" 
+    },
+    { 
+        q: "<span class='reading-passage'>تطور مفهوم التعليم في القرن الحادي والعشرين لينتقل من مجرد تلقين المعلومات إلى تنمية مهارات التفكير الناقد والإبداع لدى المتعلم. أصبح دور المعلم ميسراً للعملية التعليمية وموجهاً للطلاب نحو مصادر المعرفة الموثوقة بدلاً من كونه المصدر الوحيد للمعلومة. يساعد هذا التحول الطلاب على مواجهة تحديات سوق العمل المتغيرة باستمرار، حيث أصبحت القدرة على التعلم المستمر أهم من الشهادة الأكاديمية المجردة.</span> تحول دور المعلم في العصر الحالي ليصبح:", 
+        opts: ["ناقلاً للمعلومات فقط", "مراقباً للاختبارات", "ميسراً وموجهاً للطلاب", "مديراً للشؤون الإدارية"], 
+        ans: "ميسراً وموجهاً للطلاب" 
+    },
+    { 
+        q: "<span class='reading-passage'>الأمن السيبراني هو ممارسة تهدف لحماية الأنظمة والشبكات من الهجمات الرقمية. وتزداد أهميته مع تحول المجتمعات نحو الرقمنة الشاملة، حيث تصبح البيانات هي النفط الجديد. إن غياب الوعي لدى المستخدم يمثل الثغرة الأكبر التي ينفذ منها المخترقون مهما كانت قوة الأنظمة التقنية المستخدمة في المؤسسات الكبرى.</span> الثغرة الأكبر في نظام الأمن كما يراها الكاتب هي:", 
+        opts: ["قوة الأنظمة", "غياب وعي المستخدم", "نقص البيانات", "التحول الرقمي"], 
+        ans: "غياب وعي المستخدم" 
+    },
+
+    // --- 5. الخطأ السياقي (7 أسئلة) ---
+    { q: "العظمة الحقيقية هي أن تكون عظيماً في تواضعك، وصغيراً في كبريائك.", opts: ["عظيماً", "تواضعك", "صغيراً", "كبريائك"], ans: "كبريائك" },
+    { q: "الكلمة الطيبة تشبه الشجرة الخبيثة، جذورها قوية وفروعها في السماء.", opts: ["الطيبة", "الخبيثة", "جذورها", "السماء"], ans: "الخبيثة" },
+    { q: "المتفائل يرى فرصة في كل صعوبة، والمتشائم يرى صعوبة في كل منحة.", opts: ["المتفائل", "صعوبة", "المتشائم", "منحة"], ans: "منحة" },
+    { q: "الأصدقاء الحقيقيون كالمظلة، تظهر قيمتها عندما يصفو الجو.", opts: ["الحقيقيون", "كالمظلة", "قيمتها", "يصفو"], ans: "يصفو" },
+    { q: "أفضل وسيلة لتعيش سعيداً هي أن تقلل من توقعاتك، وتزيد من طموحك الفاشل.", opts: ["سعيداً", "تقلل", "طموحك", "الفاشل"], ans: "الفاشل" },
+    { q: "كتمان السر شيمة من شيم الضعفاء، وإفشاؤه دليل على القوة والتمكن.", opts: ["كتمان", "الضعفاء", "إفشاؤه", "القوة"], ans: "الضعفاء" },
+    { q: "الاعتذار عن الخطأ قوة، والاستمرار فيه حكمة لا يتقنها الكثير.", opts: ["الاعتذار", "قوة", "الاستمرار", "حكمة"], ans: "حكمة" },
+
+    // --- 6. الارتباط والاختلاف (6 أسئلة) ---
+    { q: "ما الكلمة التي ترتبط بكلمة (غابة):", opts: ["شوارع", "أشجار", "رمال", "مصانع"], ans: "أشجار" },
+    { q: "أي من الكلمات التالية تختلف في نوعها:", opts: ["طائرة", "سيارة", "سفينة", "قلم"], ans: "قلم" },
+    { q: "الارتباط الأقوى لـ (مدرسة) هو:", opts: ["تعليم", "لعب", "تجارة", "زراعة"], ans: "تعليم" },
+    { q: "يرتبط (المستشفى) بـ:", opts: ["المسافرين", "الطلاب", "العمال", "المرضى"], ans: "المرضى" },
+    { q: "الكلمة التي لا تنتمي للمجموعة:", opts: ["خاتم", "سوار", "قرط", "ثوب"], ans: "ثوب" },
+    { q: "العلاقة الرابطة بين (الأسد والنمر) هي:", opts: ["الافتراس", "الألفة", "السرعة", "الحجم"], ans: "الافتراس" }
+];
+
+    let currentIdx = 0, userScore = 0, timer;
+
+    function loadQuestion() {
+        if(currentIdx >= quizData.length) return finish();
+        const data = quizData[currentIdx];
+        document.getElementById('q-counter').innerText = `السؤال ${currentIdx+1} من ${quizData.length}`;
+        
+        // استخدام innerHTML لضمان ظهور التنسيق الملون
+        document.getElementById('question-text').innerHTML = data.q;
+        
+        document.getElementById('next-btn').classList.add('hidden');
+        const box = document.getElementById('options-area'); box.innerHTML = '';
+        [...data.opts].sort(() => Math.random()-0.5).forEach(o => {
+            const d = document.createElement('div'); d.className = 'opt'; d.innerText = o;
+            d.onclick = () => {
+                clearInterval(timer);
+                if(o === data.ans) userScore++;
+                document.querySelectorAll('.opt').forEach(el => {
+                    el.onclick = null;
+                    if(el.innerText === data.ans) el.classList.add('correct');
+                    else if(el.innerText === o) el.classList.add('wrong');
+                });
+                document.getElementById('next-btn').classList.remove('hidden');
+            };
+            box.appendChild(d);
+        });
+        startTimer();
+    }
+
+    function startTimer() {
+        let s = 45; document.getElementById('timer').innerText = s;
+        clearInterval(timer);
+        timer = setInterval(() => {
+            s--; document.getElementById('timer').innerText = s;
+            if(s<=0) { clearInterval(timer); nextQuestion(); }
+        }, 1000);
+    }
+
+    function nextQuestion() { currentIdx++; loadQuestion(); }
+
+    async function finish() {
+        document.getElementById('quiz-page').classList.add('hidden');
+        document.getElementById('result-page').classList.remove('hidden');
+        document.getElementById('score-text').innerText = `${userScore} / ${quizData.length}`;
+        await db.collection("student_results").add({
+            name: sName, 
+            email: sEmail,
+            student_class: sClass, 
+            score: userScore, 
+            total: quizData.length,
+            model_id: currentModelId, 
+            time: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    }
+</script>
+</body>
+</html>
